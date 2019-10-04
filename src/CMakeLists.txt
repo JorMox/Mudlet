@@ -22,8 +22,8 @@
 set(mudlet_RCCS mudlet.qrc)
 
 if(USE_FONTS)
-    set(mudlet_fonts_RCCS mudlet_fonts.qrc)
-    add_definitions(-DINCLUDE_FONTS)
+  set(mudlet_fonts_RCCS mudlet_fonts.qrc)
+  add_definitions(-DINCLUDE_FONTS)
 endif()
 
 set(mudlet_SRCS
@@ -55,7 +55,6 @@ set(mudlet_SRCS
     EAction.cpp
     exitstreewidget.cpp
     FontManager.cpp
-    glwidget.cpp
     Host.cpp
     HostManager.cpp
     ircmessageformatter.cpp
@@ -95,36 +94,34 @@ set(mudlet_SRCS
     TTrigger.cpp
     TVar.cpp
     VarUnit.cpp
-    wcwidth.cpp
     XMLexport.cpp
     XMLimport.cpp
 )
 
 # This is for compiled UI files, not those used at runtime though the resource file.
 set(mudlet_UIS
-    ui/about_dialog.ui
-    ui/actions_main_area.ui
-    ui/aliases_main_area.ui
-    ui/color_trigger.ui
-    ui/composer.ui
-    ui/connection_profiles.ui
-    ui/dlgPackageExporter.ui
-    ui/irc.ui
-    ui/keybindings_main_area.ui
-    ui/main_window.ui
-    ui/mapper.ui
-    ui/notes_editor.ui
-    ui/profile_preferences.ui
-    ui/room_exits.ui
-    ui/scripts_main_area.ui
-    ui/source_editor_area.ui
-    ui/system_message_area.ui
-    ui/timers_main_area.ui
-    ui/triggers_main_area.ui
-    ui/trigger_editor.ui
-    ui/trigger_pattern_edit.ui
-    ui/vars_main_area.ui
-)
+  ui/about_dialog.ui
+  ui/actions_main_area.ui
+  ui/aliases_main_area.ui
+  ui/color_trigger.ui
+  ui/composer.ui
+  ui/connection_profiles.ui
+  ui/dlgPackageExporter.ui
+  ui/irc.ui
+  ui/keybindings_main_area.ui
+  ui/main_window.ui
+  ui/mapper.ui
+  ui/notes_editor.ui
+  ui/profile_preferences.ui
+  ui/room_exits.ui
+  ui/scripts_main_area.ui
+  ui/source_editor_area.ui
+  ui/system_message_area.ui
+  ui/timers_main_area.ui
+  ui/triggers_main_area.ui
+  ui/trigger_editor.ui
+  ui/trigger_pattern_edit.ui
+  ui/vars_main_area.ui)
 
 set(mudlet_MOC_HDRS
     ctelnet.h
@@ -152,7 +149,6 @@ set(mudlet_MOC_HDRS
     dlgVarsMainArea.h
     EAction.h
     exitstreewidget.h
-    glwidget.h
     Host.h
     mudlet.h
     T2DMap.h
@@ -207,7 +203,7 @@ set(mudlet_HDRS
     TTrigger.h
     TVar.h
     VarUnit.h
-    wcwidth.h
+    widechar_width.h
     XMLimport.h
 )
 
@@ -215,6 +211,11 @@ if(USE_UPDATER)
   list(APPEND mudlet_SRCS updater.cpp)
   list(APPEND mudlet_MOC_HDRS updater.h)
 endif(USE_UPDATER)
+
+if(USE_3DMAPPER)
+  list(APPEND mudlet_SRCS glwidget.cpp)
+  list(APPEND mudlet_MOC_HDRS glwidget.h)
+endif(USE_3DMAPPER)
 
 if(MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -MP") # parallel builds
@@ -232,7 +233,7 @@ else()
   endif()
 endif()
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -336,15 +337,15 @@ if((APPLE) AND (PKG_CONFIG_FOUND))
   endif()
 endif()
 
-find_package(Qt5 5.7 REQUIRED COMPONENTS Core Multimedia Network OpenGL UiTools Widgets Concurrent)
-
-# This is not present before Qt 5.7:
+find_package(Qt5 5.11 REQUIRED COMPONENTS Core Multimedia Network OpenGL UiTools Widgets Concurrent)
 find_package(Qt5 COMPONENTS Gamepad QUIET)
+find_package(Qt5 COMPONENTS TextToSpeech QUIET)
 
-if (Qt5Core_VERSION VERSION_LESS 5.7)
-  message(FATAL_ERROR "Mudlet requires Qt 5.7 or later, yours is ${Qt5Core_VERSION}")
+if (Qt5Core_VERSION VERSION_LESS 5.11)
+  message(FATAL_ERROR "Mudlet requires Qt 5.11 or later, yours is ${Qt5Core_VERSION}")
 else()
-    message(STATUS "Qt version: ${Qt5Core_VERSION}")
+  # Qt Speech (or at least the TTS part) was officially release in 5.10
+  message(STATUS "Qt version: ${Qt5Core_VERSION}")
 endif()
 
 message(STATUS "Using ${CMAKE_CXX_COMPILER_ID} compiler")
@@ -365,6 +366,15 @@ else()
   message(STATUS "The Updater code is excluded as on-line updating is not available on this platform")
 endif()
 
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux") OR (CMAKE_SYSTEM_NAME STREQUAL "Windows") OR (CMAKE_SYSTEM_NAME STREQUAL "Darwin"))
+  if(USE_3DMAPPER)
+    message(STATUS "The 3D mapper code is included in this configuration")
+  else(USE_3DMAPPER)
+    message(STATUS "The 3D mapper code is excluded from this configuration")
+  endif(USE_3DMAPPER)
+else()
+  message(STATUS "The 3D mapper code is excluded as it might not be supported on this platform")
+endif()
 
 if(WIN32)
   set(mudlet_RC_ICONS = icons/mudlet_main_512x512_6XS_icon.ico)
@@ -397,8 +407,8 @@ find_package(Boost 1.44 COMPONENTS graph)
 add_definitions(-DAPP_VERSION="${APP_VERSION}" -DAPP_BUILD="${APP_BUILD}" -DAPP_TARGET="${APP_TARGET}")
 
 if(UNIX)
-    set(LUA_DEFAULT_DIR "${CMAKE_INSTALL_PREFIX}/share/mudlet/lua")
-    set(LCF_DIR "${CMAKE_INSTALL_PREFIX}/share/mudlet/lua/lcf")
+  set(LUA_DEFAULT_DIR "${CMAKE_INSTALL_PREFIX}/share/mudlet/lua")
+  set(LCF_DIR "${CMAKE_INSTALL_PREFIX}/share/mudlet/lua/lcf")
 endif(UNIX)
 
 # Define a preprocessor symbol with the default fallback location from which
@@ -427,17 +437,23 @@ include_directories(
     ${PUGIXML_INCLUDE_DIR}
 )
 
+if(Qt5TextToSpeech_FOUND)
+  add_definitions(${Qt5TextToSpeech_DEFINITIONS})
+  include_directories(${Qt5TextToSpeech_INCLUDE_DIRS})
+  message(STATUS "Using TextToSpeech module")
+endif(Qt5TextToSpeech_FOUND)
+
 if(Qt5Gamepad_FOUND)
-    add_definitions(${Qt5Gamepad_DEFINITIONS})
-    include_directories(${Qt5Gamepad_INCLUDE_DIRS})
-    message(STATUS "Using Gamepad module")
+  add_definitions(${Qt5Gamepad_DEFINITIONS})
+  include_directories(${Qt5Gamepad_INCLUDE_DIRS})
+  message(STATUS "Using Gamepad module")
 endif(Qt5Gamepad_FOUND)
 
 # Need to use the plural variables as there can be more than ONE directory to specify:
 if(PC_ZIP_FOUND)
-    include_directories( ${PC_ZIP_INCLUDE_DIRS} )
+  include_directories( ${PC_ZIP_INCLUDE_DIRS} )
 else()
-    include_directories( ${ZIP_INCLUDE_DIRS} )
+  include_directories( ${ZIP_INCLUDE_DIRS} )
 endif()
 
 include_directories( ${ZLIB_INCLUDE_DIR} )
@@ -445,31 +461,29 @@ include_directories( ${ZLIB_INCLUDE_DIR} )
 QT5_WRAP_UI(mudlet_UIS_H ${mudlet_UIS})
 QT5_WRAP_CPP(mudlet_MOC_SRCS ${mudlet_MOC_HDRS})
 if(USE_FONTS)
-    QT5_ADD_RESOURCES(mudlet_RCC_SRCS ${mudlet_RCCS} ${mudlet_fonts_RCCS})
+  QT5_ADD_RESOURCES(mudlet_RCC_SRCS ${mudlet_RCCS} ${mudlet_fonts_RCCS})
 else()
-    QT5_ADD_RESOURCES(mudlet_RCC_SRCS ${mudlet_RCCS})
+  QT5_ADD_RESOURCES(mudlet_RCC_SRCS ${mudlet_RCCS})
 endif()
 
 if(WIN32)
-    add_executable(mudlet WIN32
-        ${mudlet_SRCS}
-        ${mudlet_MOC_SRCS}
-        ${mudlet_RCC_SRCS}
-        ${mudlet_HDRS}
-        ${mudlet_UIS_H}
-        ${mudlet_MOC_HDRS}
-        ${mudlet_LUA_FILES}
-    )
+  add_executable(mudlet WIN32
+    ${mudlet_SRCS}
+    ${mudlet_MOC_SRCS}
+    ${mudlet_RCC_SRCS}
+    ${mudlet_HDRS}
+    ${mudlet_UIS_H}
+    ${mudlet_MOC_HDRS}
+    ${mudlet_LUA_FILES})
 else()
-    add_executable(mudlet
-        ${mudlet_SRCS}
-        ${mudlet_MOC_SRCS}
-        ${mudlet_RCC_SRCS}
-        ${mudlet_HDRS}
-        ${mudlet_UIS_H}
-        ${mudlet_MOC_HDRS}
-        ${mudlet_LUA_FILES}
-    )
+  add_executable(mudlet
+    ${mudlet_SRCS}
+    ${mudlet_MOC_SRCS}
+    ${mudlet_RCC_SRCS}
+    ${mudlet_HDRS}
+    ${mudlet_UIS_H}
+    ${mudlet_MOC_HDRS}
+    ${mudlet_LUA_FILES})
 endif()
 
 target_link_libraries(mudlet
@@ -489,21 +503,25 @@ target_link_libraries(mudlet
     ${PUGIXML_LIBRARIES}
     communi
     edbee-lib
+    qt5keychain
 )
 
+if(Qt5TextToSpeech_FOUND)
+  target_link_libraries(mudlet ${Qt5TextToSpeech_LIBRARIES})
+endif(Qt5TextToSpeech_FOUND)
+
 if(USE_UPDATER)
-    target_link_libraries(mudlet
-        dblsqd)
+  target_link_libraries(mudlet dblsqd)
 endif(USE_UPDATER)
 
 if(Qt5Gamepad_FOUND)
-    target_link_libraries(mudlet ${Qt5Gamepad_LIBRARIES})
+  target_link_libraries(mudlet ${Qt5Gamepad_LIBRARIES})
 endif(Qt5Gamepad_FOUND)
 
 if(PC_ZIP_FOUND)
-    target_link_libraries(mudlet ${PC_ZIP_LIBRARIES})
+  target_link_libraries(mudlet ${PC_ZIP_LIBRARIES})
 else()
-    target_link_libraries(mudlet ${ZIP_LIBRARIES})
+  target_link_libraries(mudlet ${ZIP_LIBRARIES})
 endif()
 
 if(WIN32)
@@ -512,16 +530,14 @@ if(WIN32)
 endif()
 
 if(APPLE)
-  target_link_libraries(mudlet
-          luazip
-  )
+  target_link_libraries(mudlet luazip)
 
   if(USE_UPDATER)
     target_link_libraries(mudlet
-          cocoa-qt-glue
-          "-framework Sparkle"
-          "-framework AppKit"
-          "-F${CMAKE_HOME_DIRECTORY}/3rdparty/cocoapods/Pods/Sparkle")
+      cocoa-qt-glue
+      "-framework Sparkle"
+      "-framework AppKit"
+      "-F${CMAKE_HOME_DIRECTORY}/3rdparty/cocoapods/Pods/Sparkle")
   endif(USE_UPDATER)
 endif()
 
@@ -538,16 +554,22 @@ if(UNIX)
   foreach(lua_file ${lua_files})
     get_filename_component(lua_file_name ${lua_file} NAME)
     get_filename_component(lua_file_path ${lua_file} DIRECTORY)
-#    message(STATUS "For ${lua_file} ==> installing ${lua_file_name} in ${CMAKE_INSTALL_PREFIX}/share/mudlet/lua/${lua_file_path}")
     install(FILES "${CMAKE_HOME_DIRECTORY}/src/mudlet-lua/lua/${lua_file}"
       DESTINATION "share/mudlet/lua/${lua_file_path}"
       PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
       CONFIGURATIONS Debug Release)
-  endforeach(lua_file)
+  endforeach()
+  foreach(lua_test_file ${lua_test_files})
+    get_filename_component(lua_test_file_name ${lua_test_file} NAME)
+    get_filename_component(lua_test_file_path ${lua_test_file} DIRECTORY)
+    install(FILES "${CMAKE_HOME_DIRECTORY}/src/mudlet-lua/tests/${lua_test_file}"
+      DESTINATION "share/mudlet/tests/${lua_test_file_path}"
+      PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+      CONFIGURATIONS Debug Release)
+  endforeach()
   foreach(lcf_file ${lcf_files})
     get_filename_component(lcf_file_name ${lcf_file} NAME)
     get_filename_component(lcf_file_path ${lcf_file} DIRECTORY)
-#    message(STATUS "For ${lcf_file} ==> installing ${lcf_file_name} in ${CMAKE_INSTALL_PREFIX}/share/mudlet/lua/${lcf_file_path}")
     install(FILES "${CMAKE_HOME_DIRECTORY}/3rdparty/${lcf_file}"
       DESTINATION "share/mudlet/lua/${lcf_file_path}"
       PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ

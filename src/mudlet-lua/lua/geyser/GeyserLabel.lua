@@ -23,9 +23,7 @@ Geyser.Label.numChildren = 0
 -- specified will use the last set value.
 -- @param message The message to print. Can contain html formatting.
 -- @param color The color to use.
--- @param format A format list to use. 'c' - center, 'b' - bold, 'i' - italics,
---               'u' - underline, '##' - font size.  For example, "cb18"
---               specifies center bold 18pt font be used.  Order doesn't matter.
+-- @param format A format list to use. 'c' - center, 'l' - left, 'r' - right,  'b' - bold, 'i' - italics, 'u' - underline, 's' - strikethrough,  '##' - font size.  For example, "cb18" specifies center bold 18pt font be used.  Order doesn't matter.
 function Geyser.Label:echo(message, color, format)
   message = message or self.message
   self.message = message
@@ -35,6 +33,7 @@ function Geyser.Label:echo(message, color, format)
   self.fgColor = color
 
   local fs = ""
+  local alignment = ""
   -- check for formatting commands
   if format then
     if string.find(format, "b") then
@@ -44,10 +43,20 @@ function Geyser.Label:echo(message, color, format)
       message = "<i>" .. message .. "</i>"
     end
     if string.find(format, "c") then
-      message = "<center>" .. message .. "</i>"
+      alignment = "center"
+    elseif string.find(format, "l") then
+      alignment = "left"
+    elseif string.find(format, "r") then
+      alignment = "right"
+    end
+    if alignment ~= "" then
+      alignment = string.format([[align="%s" ]], alignment)
     end
     if string.find(format, "u") then
       message = "<u>" .. message .. "</u>"
+    end
+    if string.find(format, 's') then
+      message = "<s>" .. message .. "</s>"
     end
     fs = string.gmatch(format, "%d+")()
     if not fs then
@@ -55,7 +64,7 @@ function Geyser.Label:echo(message, color, format)
     end
     fs = "font-size: " .. fs .. "pt; "
   end
-  message = [[<div style="color: ]] .. Geyser.Color.hex(self.fgColor) .. "; " .. fs ..
+  message = [[<div ]] .. alignment .. [[ style="color: ]] .. Geyser.Color.hex(self.fgColor) .. "; " .. fs ..
   [[">]] .. message .. [[</div>]]
   echo(self.name, message)
 end
@@ -410,7 +419,7 @@ end
 --- Internal function when a parent nest element is clicked
 --- to lay out the nested elements within
 -- @param label The name of the label to use
-function doNestClick(label)
+function doNestShow(label)
   Geyser.Label:displayNest(label)
 end
 
@@ -463,10 +472,13 @@ function Geyser.Label:new (cons, container)
   Geyser.Color.applyColors(me)
   me:echo()
 
+  -- Set up mouse hover as the callback if we have one
+  if cons.nestflyout then
+    setLabelOnEnter(me.name, "doNestShow", me.name)
+  end
   -- Set up the callback if we have one
   if cons.nestable then
-    --echo("setting callback to doNestClick")
-    setLabelClickCallback(me.name, "doNestClick", me.name)
+    setLabelClickCallback(me.name, "doNestShow", me.name)
   end
   if me.clickCallback then
     if type(me.clickArgs) == "string" or type(me.clickArgs) == "number" then
@@ -526,7 +538,10 @@ function Geyser.Label:new (cons, container)
   if me.onLeave then
     me:setOnLeave(me.onLeave, me.args)
   end
-
+  
+  -- Set clickthrough if included in constructor
+  if cons.clickthrough then me:enableClickthrough() end
+  
   --print("  New in " .. self.name .. " : " .. me.name)
   return me
 end
@@ -618,6 +633,16 @@ function Geyser.Label:addChild(cons, container)
   table.insert(self.nestedLabels, me)
   me:hide()
   return me
+end
+
+--- Sets label to no longer intercept mouse events
+function Geyser.Label:enableClickthrough()
+  enableClickthrough(self.name)
+end
+
+--- Sets label to once again intercept mouse events
+function Geyser.Label:disableClickthrough()
+  disableClickthrough(self.name)
 end
 
 ---

@@ -26,6 +26,7 @@
 #endif
 
 #include "pre_guard.h"
+#include <QPushButton>
 #include <QtConcurrent>
 #include "post_guard.h"
 
@@ -37,12 +38,19 @@
 //   and promptly quits. Installer updates Mudlet and launches Mudlet when its done
 // mac: handled completely outside of Mudlet by Sparkle
 
-Updater::Updater(QObject* parent, QSettings* settings) : QObject(parent), mUpdateInstalled(false), mpInstallOrRestart(new QPushButton(tr("Update")))
+Updater::Updater(QObject* parent, QSettings* settings) : QObject(parent)
+, mUpdateInstalled(false)
+, mpInstallOrRestart(new QPushButton(tr("Update")))
+, updateDialog(nullptr)
 {
     Q_ASSERT_X(settings, "updater", "QSettings object is required for the updater to work");
     this->settings = settings;
 
     feed = new dblsqd::Feed(QStringLiteral("https://feeds.dblsqd.com/MKMMR7HNSP65PquQQbiDIw"), QStringLiteral("release"));
+}
+Updater::~Updater()
+{
+    delete (feed);
 }
 
 // start the update process and figure out what needs to be done
@@ -106,7 +114,7 @@ void Updater::finishSetup()
     recordUpdateTime();
     recordUpdatedVersion();
     mUpdateInstalled = true;
-    emit updateInstalled();
+    emit signal_updateInstalled();
 }
 
 #if defined(Q_OS_MACOS)
@@ -125,15 +133,18 @@ void Updater::setupOnWindows()
 
     // Setup to automatically download the new release when an update is available
     QObject::connect(feed, &dblsqd::Feed::ready, [=]() {
-        if (mudlet::scmIsDevelopmentVersion || !updateAutomatically()) {
+        if (mudlet::scmIsDevelopmentVersion) {
             return;
         }
 
         auto updates = feed->getUpdates();
         if (updates.isEmpty()) {
             return;
+        } else if (!updateAutomatically()) {
+            emit signal_updateAvailable(updates.size());
+        } else {
+            feed->downloadRelease(updates.first());
         }
-        feed->downloadRelease(updates.first());
     });
 
     // Setup to run setup.exe to replace the old installation
@@ -152,7 +163,7 @@ void Updater::setupOnWindows()
     });
 
     // finally, create the dblsqd objects. Constructing the UpdateDialog triggers the update check
-    updateDialog = new dblsqd::UpdateDialog(feed, updateAutomatically() ? dblsqd::UpdateDialog::Manual : dblsqd::UpdateDialog::OnLastWindowClosed, nullptr, settings);
+    updateDialog = new dblsqd::UpdateDialog(feed, updateAutomatically() ? dblsqd::UpdateDialog::OnLastWindowClosed : dblsqd::UpdateDialog::Manual, nullptr, settings);
     mpInstallOrRestart->setText(tr("Update"));
     updateDialog->addInstallButton(mpInstallOrRestart);
     connect(updateDialog, &dblsqd::UpdateDialog::installButtonClicked, this, &Updater::installOrRestartClicked);
@@ -180,26 +191,32 @@ void Updater::prepareSetupOnWindows(const QString& downloadedSetupName)
 #if defined(Q_OS_LINUX)
 void Updater::setupOnLinux()
 {
-    QObject::connect(feed, &dblsqd::Feed::ready, [=]() { qWarning() << "Checked for updates:" << feed->getUpdates().size() << "update(s) available"; });
+    QObject::connect(feed, &dblsqd::Feed::ready, this, [=]() { qWarning() << "Checked for updates:" << feed->getUpdates().size() << "update(s) available"; });
 
+    // Setup to automatically download the new release when an update is
+    // available or wave a flag when it is to be done manually
     // Setup to automatically download the new release when an update is available
-    QObject::connect(feed, &dblsqd::Feed::ready, [=]() {
+    QObject::connect(feed, &dblsqd::Feed::ready, this, [=]() {
 
         // only update release builds to prevent auto-update from overwriting your
         // compiled binary while in development
-        if (mudlet::scmIsDevelopmentVersion || !updateAutomatically()) {
+        if (mudlet::scmIsDevelopmentVersion) {
             return;
         }
 
         auto updates = feed->getUpdates();
         if (updates.isEmpty()) {
             return;
+        } else if (!updateAutomatically()) {
+            emit signal_updateAvailable(updates.size());
+            return;
+        } else {
+            feed->downloadRelease(updates.first());
         }
-        feed->downloadRelease(updates.first());
     });
 
     // Setup to unzip and replace old binary when the download is done
-    QObject::connect(feed, &dblsqd::Feed::downloadFinished, [=]() {
+    QObject::connect(feed, &dblsqd::Feed::downloadFinished, this, [=]() {
         // if automatic updates are enabled, and this isn't a manual check, perform the automatic update
         if (!(updateAutomatically() && updateDialog->isHidden())) {
             return;
@@ -214,7 +231,7 @@ void Updater::setupOnLinux()
     });
 
     // finally, create the dblsqd objects. Constructing the UpdateDialog triggers the update check
-    updateDialog = new dblsqd::UpdateDialog(feed, updateAutomatically() ? dblsqd::UpdateDialog::Manual : dblsqd::UpdateDialog::OnLastWindowClosed, nullptr, settings);
+    updateDialog = new dblsqd::UpdateDialog(feed, updateAutomatically() ? dblsqd::UpdateDialog::OnLastWindowClosed : dblsqd::UpdateDialog::Manual, nullptr, settings);
     mpInstallOrRestart->setText(tr("Update"));
     updateDialog->addInstallButton(mpInstallOrRestart);
     connect(updateDialog, &dblsqd::UpdateDialog::installButtonClicked, this, &Updater::installOrRestartClicked);
@@ -238,14 +255,13 @@ void Updater::untarOnLinux(const QString& fileName)
 
 void Updater::updateBinaryOnLinux()
 {
-    // FIXME don't hardcode name in case we want to change it
     QFileInfo unzippedBinary(QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/" + unzippedBinaryName);
     auto systemEnvironment = QProcessEnvironment::systemEnvironment();
     auto appimageLocation = systemEnvironment.contains(QStringLiteral("APPIMAGE")) ?
                 systemEnvironment.value(QStringLiteral("APPIMAGE"), QString()) :
                 QCoreApplication::applicationFilePath();
 
-    QString installedBinaryPath(appimageLocation);
+    const QString& installedBinaryPath(appimageLocation);
 
     auto executablePermissions = unzippedBinary.permissions();
     executablePermissions |= QFileDevice::ExeOwner | QFileDevice::ExeUser;
@@ -271,7 +287,7 @@ void Updater::installOrRestartClicked(QAbstractButton* button, const QString& fi
 {
     Q_UNUSED(button)
 
-    // moc, when used with cmake on macos bugs out if the entire function declaration and definition is entirely
+    // moc, when used with cmake on macOS bugs out if the entire function declaration and definition is entirely
     // commented out so we leave a stub in
 #if !defined(Q_OS_MACOS)
 

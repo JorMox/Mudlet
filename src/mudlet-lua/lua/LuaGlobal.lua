@@ -25,6 +25,7 @@ end
 
 json_to_value = yajl.to_value
 gmcp = {}
+mssp = {}
 
 function __gmcp_merge_gmcp_sub_tables( a, key )
   local _m = a.__needMerge;
@@ -91,18 +92,6 @@ end
 function handleWindowResizeEvent()
 end
 
--- override built-in createMiniConsole to allow for multiple calls
-do
-  local oldcreateMiniConsole = createMiniConsole
-
-  function createMiniConsole(name, x, y, width, height)
-    oldcreateMiniConsole(name, 0, 0, 0, 0)
-    moveWindow(name, x, y)
-    resizeWindow(name, width, height)
-  end
-end
-
-
 local packages = {
   "StringUtils.lua",
   "TableUtils.lua",
@@ -128,7 +117,8 @@ local packages = {
   "GUIUtils.lua",
   "Other.lua",
   "GMCP.lua",
-  "KeyCodes.lua"
+  "KeyCodes.lua",
+  "TTSValues.lua"
 }
 
 -- on windows LuaGlobal gets loaded with the current directory set to mudlet.exe's location

@@ -363,7 +363,23 @@ function setGaugeText(gaugeName, gaugeText, r, g, b)
   gaugesTable[gaugeName].text = echoString
 end
 
+--- Set gauge to no longer intercept mouse events
+--- @param gaugeName
+function enableGaugeClickthrough(gaugeName)
+  assert(gaugesTable[gaugeName], "enableGaugeClickthrough: no such gauge exists.")
+  enableClickthrough(gaugeName .. "_back")
+  enableClickthrough(gaugeName .. "_front")
+  enableClickthrough(gaugeName .. "_text")
+end
 
+--- Set gauge to once again intercept mouse events
+--- @param gaugeName
+function disableGaugeClickthrough(gaugeName)
+  assert(gaugesTable[gaugeName], "disableGaugeClickthrough: no such gauge exists.")
+  disableClickthrough(gaugeName .. "_back")
+  disableClickthrough(gaugeName .. "_front")
+  disableClickthrough(gaugeName .. "_text")
+end
 
 --- Pads a hex number to ensure a minimum of 2 digits.
 ---
@@ -694,7 +710,7 @@ end
 ---   </pre>
 ---
 --- @see color_table
-local function calc_lumosity(r,g,b)
+local function calc_luminosity(r,g,b)
   r = r < 11 and r / (255 * 12.92) or ((0.055 + r / 255) / 1.055) ^ 2.4
   g = g < 11 and g / (255 * 12.92) or ((0.055 + g / 255) / 1.055) ^ 2.4
   b = b < 11 and b / (255 * 12.92) or ((0.055 + b / 255) / 1.055) ^ 2.4
@@ -724,7 +740,7 @@ function showColors(...)
     if k:lower():find(search) then
       local v = color_table[k]
       local fgc = "white"
-      if calc_lumosity(v[1],v[2],v[3]) > 0.5 then
+      if calc_luminosity(v[1],v[2],v[3]) > 0.5 then
         fgc = "black"
       end
       cechoLink(string.format('<%s:%s>%-23s<reset>  ',fgc,k,k), [[printCmdLine("]] .. k .. [[")]], table.concat(v, ", "), true)
@@ -772,8 +788,8 @@ if rex then
   _Echos = {
     Patterns = {
       Hex = {
-        [[(\x5c?\|c[0-9a-fA-F]{6}?(?:,[0-9a-fA-F]{6})?)|(\|r)]],
-        rex.new [[\|c(?:([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2}))?(?:,([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2}))?]],
+        [[(\x5c?(?:#|\|c)[0-9a-fA-F]{6}?(?:,[0-9a-fA-F]{6})?)|(\|r|#r)]],
+        rex.new [[(?:#|\|c)(?:([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2}))?(?:,([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2}))?]],
       },
       Decimal = {
         [[(<[0-9,:]+>)|(<r>)]],
@@ -875,8 +891,8 @@ if rex then
     local out, reset
     local args = { ... }
     local n = #args
-
-    if func == 'echoLink' then
+    
+    if string.find(func, "Link") then
       if n < 3 then
         error 'Insufficient arguments, usage: ([window, ] string, command, hint)'
       elseif n == 3 then
@@ -885,12 +901,22 @@ if rex then
         str, cmd, hint, fmt = ...
       elseif n >= 4 and type(args[4]) == 'string' then
         win, str, cmd, hint, fmt = ...
-        if win == "main" then
-          win = nil
-        end
       else
         error 'Improper arguments, usage: ([window, ] string, command, hint)'
       end
+    elseif string.find(func, "Popup") then
+      if n < 3 then
+        error 'Insufficient arguments, usage: ([window, ] string, {commands}, {hints})'
+      elseif n == 3 then
+        str, cmd, hint = ...
+      elseif n == 4 and type(args[4]) == 'boolean' then
+        str, cmd, hint, fmt = ...
+      elseif n >= 4 and type(args[4]) == 'table' then
+        win, str, cmd, hint, fmt = ...
+      else
+        error 'Improper arguments, usage: ([window, ] string, {commands}, {hints})'
+      end
+      
     else
       if args[1] and args[2] and args[1] ~= "main" then
         win, str = args[1], args[2]
@@ -900,59 +926,42 @@ if rex then
         str = args[1]
       end
     end
-
+    win = win or "main"
+    
     out = function(...)
       _G[func](...)
     end
-
-    if win then
-      reset = function()
-        resetFormat(win)
-      end
-    else
-      reset = function()
-        resetFormat()
-      end
-    end
-
+    
     local t = _Echos.Process(str, style)
-
-    deselect()
-    reset()
+    
+    deselect(win)
+    resetFormat(win)
     if not str then error(style:sub(1,1):lower() .. func .. ": bad argument #1, string expected, got nil",3) end
     for _, v in ipairs(t) do
       if type(v) == 'table' then
         if v.fg then
           local fr, fg, fb = unpack(v.fg)
-          if win then
-            setFgColor(win, fr, fg, fb) else setFgColor(fr, fg, fb)
-          end
+          setFgColor(win, fr, fg, fb)
         end
         if v.bg then
           local br, bg, bb = unpack(v.bg)
-          if win then
-            setBgColor(win, br, bg, bb) else setBgColor(br, bg, bb)
-          end
+          setBgColor(win, br, bg, bb)
         end
       elseif v == "\27reset" then
-        reset()
+        resetFormat(win)
       else
         if func == 'echo' or func == 'insertText' then
-          if win then
-            out(win, v) else out(v)
-          end
+          out(win, v)
           if func == 'insertText' then
-            moveCursor(win or "main", getColumnNumber() + string.len(v), getLineNumber())
+            moveCursor(win, getColumnNumber(win) + string.len(v), getLineNumber(win))
           end
         else
-          -- if win and fmt then setUnderline(win, true) elseif fmt then setUnderline(true) end -- not sure if underline is necessary unless asked for
-          if win then
-            out(win, v, cmd, hint, (fmt == true and true or false)) else out(v, cmd, hint, (fmt == true and true or false))
-          end
+          -- if fmt then setUnderline(win, true) end -- not sure if underline is necessary unless asked for
+          out(win, v, cmd, hint, (fmt == true and true or false))
         end
       end
     end
-    reset()
+    resetFormat(win)
   end
 
 
@@ -1065,6 +1074,96 @@ if rex then
   --- @see cecho
   function cechoLink(...)
     xEcho("Color", "echoLink", ...)
+  end
+	
+  --- Inserts a link with embedded color name information at the current position
+  ---
+  --- @usage cinsertLink([window, ] string, command, hint)
+  ---
+  --- @see xEcho
+  --- @see cecho
+  function cinsertLink(...)
+    xEcho("Color", "insertLink", ...)
+  end
+
+  --- Inserts a link with embedded decimal color information at the current position
+  ---
+  --- @usage dinsertLink([window, ] string, command, hint)
+  ---
+  --- @see xEcho
+  --- @see decho
+  function dinsertLink(...)
+    xEcho("Decimal", "insertLink", ...)
+  end
+
+  --- Inserts a link with embedded hex color information at the current position
+  ---
+  --- @usage hinsertLink([window, ] string, command, hint)
+  ---
+  --- @see xEcho
+  --- @see hecho
+  function hinsertLink(...)
+    xEcho("Hex", "insertLink", ...)
+  end
+
+  --- Echos a popup with embedded color name information.
+  ---
+  --- @usage cechoPopup([window, ] string, {commands}, {hints})
+  ---
+  --- @see xEcho
+  --- @see cecho
+  function cechoPopup(...)
+    xEcho("Color", "echoPopup", ...)
+  end
+
+  --- Echos a popup with embedded color name information.
+  ---
+  --- @usage dechoPopup([window, ] string, {commands}, {hints})
+  ---
+  --- @see xEcho
+  --- @see decho
+  function dechoPopup(...)
+    xEcho("Decimal", "echoPopup", ...)
+  end
+
+  --- Echos a popup with embedded hex color information.
+  ---
+  --- @usage hechoPopup([window, ] string, {commands}, {hints})
+  ---
+  --- @see xEcho
+  --- @see hecho
+  function hechoPopup(...)
+    xEcho("Hex", "echoPopup", ...)
+  end
+	
+  --- Echos a popup with embedded color name information.
+  ---
+  --- @usage cinsertPopup([window, ] string, {commands}, {hints})
+  ---
+  --- @see xEcho
+  --- @see cecho
+  function cinsertPopup(...)
+    xEcho("Color", "insertPopup", ...)
+  end
+
+  --- Echos a popup with embedded decimal color information.
+  ---
+  --- @usage dinsertPopup([window, ] string, {commands}, {hints})
+  ---
+  --- @see xEcho
+  --- @see decho
+  function dinsertPopup(...)
+    xEcho("Decimal", "insertPopup", ...)
+  end
+
+  --- Echos a popup with embedded hex color information.
+  ---
+  --- @usage hinsertPopup([window, ] string, {commands}, {hints})
+  ---
+  --- @see xEcho
+  --- @see hecho
+  function hinsertPopup(...)
+    xEcho("Hex", "insertPopup", ...)
   end
 
 
@@ -1257,6 +1356,7 @@ local ansiPattern = rex.new("\\e\\[([0-9;]+?)m")
 -- italics and underline not currently supported since decho doesn't support them
 -- bold is emulated so it is supported, up to an extent
 function ansi2decho(text, ansi_default_color)
+  assert(type(text) == 'string', 'ansi2decho: bad argument #1 type (expected string, got '..type(text)..'!)')
   local coloursToUse = colours
   local lastColour = ansi_default_color
 
@@ -1475,4 +1575,61 @@ function prefix(what, func, fgc, bgc, window)
   if bgc then bg(window,bgc) end
   func(window,what)
   resetFormat(window)
+end
+
+--- Moves the cursor in the given window up a specified number of lines
+--- @param windowName Optional name of the window to use the function on
+--- @param lines Number of lines to move cursor
+--- @param keep_horizontal Optional boolean to specify if horizontal position should be retained
+function moveCursorUp(window, lines, keep_horizontal)
+  if type(window) ~= "string" then lines, window, keep_horizontal = window, "main", lines end
+  lines = tonumber(lines) or 1
+  if not type(keep_horizontal) == "boolean" then keep_horizontal = false end
+  local curLine = getLineNumber(window)
+  if not curLine then return nil, "window does not exist" end
+  local x = 0
+  if keep_horizontal then x = getColumnNumber(window) end
+  moveCursor(window, x, math.max(curLine - lines, 0))
+end
+
+--- Moves the cursor in the given window down a specified number of lines
+--- @param windowName Optional name of the window to use the function on
+--- @param lines Number of lines to move cursor
+--- @param keep_horizontal Optional boolean to specify if horizontal position should be retained
+function moveCursorDown(window, lines, keep_horizontal)
+  if type(window) ~= "string" then lines, window, keep_horizontal = window, "main", lines end
+  lines = tonumber(lines) or 1
+  if not type(keep_horizontal) == "boolean" then keep_horizontal = false end
+  local curLine = getLineNumber(window)
+  if not curLine then return nil, "window does not exist" end
+  local x = 0
+  if keep_horizontal then x = getColumnNumber(window) end
+  moveCursor(window, x, math.min(curLine + lines, getLastLineNumber(window)))
+end
+  
+  -- version of replace function that allows for color, by way of cinsertText
+function creplace(window, text)
+	if not text then text, window = window, nil end
+	window = window or "main"
+	local str, start, stop = getSelection(window)
+	if window ~= "main" then
+		replace(window, "")
+	else
+		replace("")
+	end
+	moveCursor(window, start, getLineNumber(window))
+	cinsertText(window, text)
+end
+
+function dreplace(window, text)
+	if not text then text, window = window, nil end
+	window = window or "main"
+	local str, start, stop = getSelection(window)
+	if window ~= "main" then
+		replace(window, "")
+	else
+		replace("")
+	end
+	moveCursor(window, start, getLineNumber(window))
+	dinsertText(window, text)
 end

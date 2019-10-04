@@ -53,7 +53,7 @@ public:
     TKey* getKey(int id);
     void removeAllTempKeys();
     void compileAll();
-    TKey* findKey(QString & name);
+    TKey* findFirstKey(QString & name);
     bool enableKey(const QString& name);
     bool disableKey(const QString& name);
     bool killKey(QString& name);
@@ -95,7 +95,7 @@ private:
     TKey* getKeyPrivate(int id);
     void initStats();
     void _assembleReport(TKey*);
-    void addKeyRootNode(TKey* pT, int parentPosition = -1, int childPosition = -1);
+    void addKeyRootNode(TKey* pT, int parentPosition = -1, int childPosition = -1, bool moveKey = false);
     void addKey(TKey* pT);
     void removeKeyRootNode(TKey* pT);
     void removeKey(TKey*);

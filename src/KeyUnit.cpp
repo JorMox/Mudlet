@@ -26,9 +26,6 @@
 #include "Host.h"
 #include "TKey.h"
 
-
-using namespace std;
-
 KeyUnit::KeyUnit(Host* pHost)
 : statsKeyTotal(0)
 , statsTempKeys(0)
@@ -49,7 +46,7 @@ KeyUnit::KeyUnit(Host* pHost)
 
 void KeyUnit::_uninstall(TKey* pChild, const QString& packageName)
 {
-    list<TKey*>* childrenList = pChild->mpMyChildrenList;
+    std::list<TKey*>* childrenList = pChild->mpMyChildrenList;
     for (auto key : *childrenList) {
         _uninstall(key, packageName);
         uninstallList.append(key);
@@ -110,12 +107,11 @@ void KeyUnit::reenableAllTriggers()
     }
 }
 
-TKey* KeyUnit::findKey(QString& name)
+TKey* KeyUnit::findFirstKey(QString& name)
 {
     QMap<QString, TKey*>::const_iterator it = mLookupTable.constFind(name);
-    while (it != mLookupTable.cend() && it.key() == name) {
-        TKey* pT = it.value();
-        return pT;
+    if (it != mLookupTable.cend() && it.key() == name) {
+        return it.value();
     }
     return nullptr;
 }
@@ -181,7 +177,7 @@ void KeyUnit::removeAllTempKeys()
     }
 }
 
-void KeyUnit::addKeyRootNode(TKey* pT, int parentPosition, int childPosition)
+void KeyUnit::addKeyRootNode(TKey* pT, int parentPosition, int childPosition, bool moveKey)
 {
     if (!pT) {
         return;
@@ -204,7 +200,7 @@ void KeyUnit::addKeyRootNode(TKey* pT, int parentPosition, int childPosition)
         }
     }
 
-    if (mKeyMap.find(pT->getID()) == mKeyMap.end()) {
+    if (!moveKey) {
         mKeyMap.insert(pT->getID(), pT);
     }
 }
@@ -221,17 +217,15 @@ void KeyUnit::reParentKey(int childID, int oldParentID, int newParentID, int par
     }
     if (pOldParent) {
         pOldParent->popChild(pChild);
-    }
-    if (!pOldParent) {
-        // CHECKME: TriggerUnit copy of this code uses mXxxxxRootNodeList.remove(pChild) - which is best?
-        removeKeyRootNode(pChild);
+    } else {
+        mKeyRootNodeList.remove(pChild);
     }
     if (pNewParent) {
         pNewParent->addChild(pChild, parentPosition, childPosition);
         pChild->setParent(pNewParent);
     } else {
         pChild->Tree<TKey>::setParent(nullptr);
-        addKeyRootNode(pChild, parentPosition, childPosition);
+        addKeyRootNode(pChild, parentPosition, childPosition, true);
     }
 }
 
@@ -387,7 +381,7 @@ void KeyUnit::initStats()
 
 void KeyUnit::_assembleReport(TKey* pChild)
 {
-    list<TKey*>* childrenList = pChild->mpMyChildrenList;
+    std::list<TKey*>* childrenList = pChild->mpMyChildrenList;
     for (auto pT : *childrenList) {
         _assembleReport(pT);
         if (pT->isActive()) {
@@ -413,7 +407,7 @@ QString KeyUnit::assembleReport()
             statsTempKeys++;
         }
         statsKeyTotal++;
-        list<TKey*>* childrenList = pChild->mpMyChildrenList;
+        std::list<TKey*>* childrenList = pChild->mpMyChildrenList;
         for (auto pT : *childrenList) {
             _assembleReport(pT);
             if (pT->isActive()) {

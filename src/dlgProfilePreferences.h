@@ -50,6 +50,7 @@ class dlgProfilePreferences : public QDialog, public Ui::profile_preferences
 public:
     Q_DISABLE_COPY(dlgProfilePreferences)
     dlgProfilePreferences(QWidget*, Host* pHost = nullptr);
+    void setTab(QString tab);
 
 public slots:
     // Fonts.
@@ -127,6 +128,8 @@ public slots:
     void slot_handleHostAddition(Host*, quint8);
     void slot_handleHostDeletion(Host*);
 
+    void slot_guiLanguageChanged(const QString&);
+
 private slots:
     void slot_changeShowSpacesAndTabs(bool);
     void slot_changeShowLineFeedsAndParagraphs(bool);
@@ -179,6 +182,11 @@ private:
     QPointer<QDoubleSpinBox> mpDoubleSpinBox_mapSymbolFontFudge;
 
     QString mLogDirPath;
+    // Needed to remember the state on construction so that we can sent the same
+    // flag back for Host::mUseSharedDictionary even if we turn-off
+    // Host::mEnableUserDictionary: - although, following review THAT has been
+    // disallowed...
+    bool mUseSharedDictionary;
 };
 
 #endif // MUDLET_DLGPROFILEPREFERENCES_H
